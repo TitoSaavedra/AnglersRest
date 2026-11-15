@@ -1,4 +1,6 @@
--- Angler's Rest: strings. Follows the client's language; anything missing stays in English.
+-- Angler's Rest: strings.
+-- Names that the game already has come from the game's own globals (so they follow the client's
+-- language with no translation work). Only the addon's own phrases live here.
 
 local ADDON_NAME, ns = ...
 
@@ -7,6 +9,30 @@ if key == "esES" or key == "esMX" then key = "esES"
 elseif key ~= "deDE" and key ~= "frFR" and key ~= "ptBR" and key ~= "itIT" and key ~= "ruRU" then
 	key = "enUS"
 end
+
+-- the game's own words: the sound options as Blizzard's settings name them
+local function game(...)
+	for i = 1, select("#", ...) do
+		local name = select(i, ...)
+		local value = name and _G[name]
+		if type(value) == "string" and value ~= "" then return value end
+	end
+end
+
+local function Base(key)
+	local names = {
+		master = { "GAME_SOUND_MASTER" },
+		sfx = { "GAME_SOUND_EFFECTS", "SOUND_OPTIONS_EFFECTS" },
+		music = { "GAME_SOUND_MUSIC", "SOUND_OPTIONS_MUSIC" },
+		ambience = { "GAME_SOUND_AMBIENCE", "SOUND_OPTIONS_AMBIENCE" },
+		dialog = { "GAME_SOUND_DIALOGUE", "SOUND_OPTIONS_DIALOGUE" },
+		sfxOn = { "GAME_SOUND_ENABLE_EFFECTS" },
+	}
+	local list = names[key]
+	if not list then return nil end
+	return game(table.unpack and table.unpack(list) or list[1], list[2], list[3])
+end
+ns.GameName = Base
 
 local strings = {
 	enUS = {
@@ -46,7 +72,6 @@ local strings = {
 		["CREDIT"] = "Skin by FlareUI",
 	},
 	esES = {
-		["TITLE"] = "Angler's Rest",
 		["SOUND_SECTION"] = "Sonido",
 		["CHANNEL_MASTER"] = "General",
 		["CHANNEL_SFX"] = "Efectos",

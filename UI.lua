@@ -277,8 +277,10 @@ local function Section(parent, text, y)
 	return title
 end
 
--- the name of a channel, in the client's language
+-- the name of a channel: the game's own word when it has one, the addon's table otherwise
 local function ChannelName(key)
+	local fromGame = ns.GameName and ns.GameName(key)
+	if fromGame then return fromGame end
 	local names = {
 		master = L("CHANNEL_MASTER"),
 		sfx = L("CHANNEL_SFX"),
@@ -343,9 +345,10 @@ end
 
 local function FitScale(wanted)
 	local screenH = UIParent:GetHeight() or 768
-	local needed = (frame:GetHeight() or 500) + 30
-	local fit = math.min(1, (screenH * 0.94) / needed)
-	return math.max(0.7, math.min(1.25, math.min(wanted or 1, fit)))
+	local needed = (frame:GetHeight() or 500) + 40
+	-- 1 unless the window would not fit; it shrinks only as much as it has to
+	local fit = math.min(1, (screenH * 0.96) / needed)
+	return math.max(0.75, math.min(1.25, math.min(wanted or 1, fit)))
 end
 
 function AnglersRest_BuildUI()
@@ -405,6 +408,9 @@ function AnglersRest_BuildUI()
 	f.status = MakeText(f, Name("Status"), 11, GREY)
 	f.status:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -2)
 	f.status:SetWidth(CONTENT)
+	f.status:SetHeight(28)
+	f.status:SetJustifyH("LEFT")
+	f.status:SetJustifyV("TOP")
 
 	-- sound: one line per channel this client has
 	local y = -56

@@ -1,7 +1,8 @@
 -- Angler's Rest: fishing audio mode + a fishing panel in the FlareUI style.
 -- The minimap icon is drawn by LibDBIcon when another addon ships it, otherwise by this addon.
 
-local ADDON_NAME = ...
+local ADDON_NAME, ns = ...
+local L = ns.L
 
 local FISHING_SPELL_ID = 7620
 local FISHING_SPELL_NAME = (C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(FISHING_SPELL_ID)) or "Fishing"
@@ -167,7 +168,7 @@ function AnglersRest_Cast()
 			return
 		end
 		if not PoleInHand() then
-			Announce("No fishing pole in your bags.")
+			Announce(L("NO_POLE"))
 			return
 		end
 	end
@@ -224,7 +225,7 @@ function AnglersRest_GiveWeaponBack(quiet)
 	EquipItemByName(oldID)
 	if not quiet then
 		local name = GetItemInfo and select(1, GetItemInfo(oldID))
-		Announce("Your " .. (name or "weapon") .. " is back on.")
+		Announce(L("EQUIPPED"):format(name or ""))
 	end
 end
 
@@ -232,13 +233,13 @@ local function EquipPole(quiet)
 	local db = EnsureDB()
 	if not db.autoEquip then return false end
 	if InCombatLockdown and InCombatLockdown() then
-		if not quiet then Announce("Can't change weapons in combat.") end
+		if not quiet then Announce(L("IN_COMBAT")) end
 		return false
 	end
 	if PoleInHand() then LearnPole(); return true end
 	local pole = LearnPole() or FindPoleInBags()
 	if not pole then
-		if not quiet then Announce("No fishing pole in your bags.") end
+		if not quiet then Announce(L("NO_POLE")) end
 		return false
 	end
 	local oldID = MainHandID()
@@ -249,7 +250,7 @@ local function EquipPole(quiet)
 	EquipItemByName(pole)
 	if not quiet then
 		local name = GetItemInfo and select(1, GetItemInfo(pole))
-		Announce("Equipped your " .. (name or "fishing pole") .. ".")
+		Announce(L("EQUIPPED"):format(name or ""))
 	end
 	return true
 end
@@ -314,7 +315,7 @@ function AnglersRest_Activate(silent)
 	local db = EnsureDB()
 	if InCombatLockdown and InCombatLockdown() then
 		resumeAfterCombat, resumeQuiet = true, silent
-		if not silent then Announce("Can't touch the sound in combat. Switching when the fight ends.") end
+		if not silent then Announce(L("IN_COMBAT")) end
 		return
 	end
 	if not db.snapshot then
@@ -327,11 +328,11 @@ function AnglersRest_Activate(silent)
 	AnglersRest_ApplyIconState()
 	AnglersRest_RefreshPanel()
 	if not silent then
-		Announce("|cff7CE07CFishing mode on|r - " .. describeAudio(db) .. ".")
+		Announce("|cff7CE07C" .. L("MODE_ON") .. "|r")
 	end
 end
 
-function describeAudio(db)
+	function describeAudio(db)
 	local parts = { "general " .. (db.volume or 100) .. "%", "effects " .. (db.sfx or 100) .. "%", "music " .. (db.music or 100) .. "%" }
 	local muted = {}
 	for _, entry in ipairs(AvailableAudio()) do
@@ -353,7 +354,7 @@ function AnglersRest_Deactivate(silent)
 	AnglersRest_ApplyIconState()
 	AnglersRest_RefreshPanel()
 	if not silent then
-		Announce("|cffff9a6aFishing mode off|r - your own sound settings are back.")
+		Announce("|cffff9a6a" .. L("MODE_OFF") .. "|r")
 	end
 end
 
@@ -478,12 +479,11 @@ end
 
 local function IconTooltip(parent)
 	GameTooltip:SetOwner(parent, "ANCHOR_LEFT")
-	GameTooltip:AddLine("|cffA67D45Angler's Rest|r")
-	GameTooltip:AddLine(EnsureDB().enabled and "|cff7CE07CFishing mode is on|r" or "Fishing mode is off", 1, 1, 1)
+	GameTooltip:AddLine("|cffA67D45" .. L("TITLE") .. "|r")
+	GameTooltip:AddLine(EnsureDB().enabled and ("|cff7CE07C" .. L("MODE_ON") .. "|r") or L("MODE_OFF"), 1, 1, 1)
 	GameTooltip:AddLine(" ")
-	GameTooltip:AddLine("|cffA67D45Left click|r sound on / off", 1, 1, 1)
-	GameTooltip:AddLine("|cffA67D45Right click|r the panel", 1, 1, 1)
-	GameTooltip:AddLine("|cffA67D45Drag|r move it around the minimap", 1, 1, 1)
+	GameTooltip:AddLine(L("HOVER_LEFT"), 1, 1, 1)
+	GameTooltip:AddLine(L("HOVER_RIGHT"), 1, 1, 1)
 	GameTooltip:Show()
 end
 
@@ -505,8 +505,8 @@ local function CreateMinimapButton()
 				end
 			end,
 			OnTooltipShow = function(tip)
-				tip:AddLine("|cffA67D45Angler's Rest|r")
-				tip:AddLine(EnsureDB().enabled and "|cff7CE07CFishing mode is on|r" or "Fishing mode is off")
+				tip:AddLine("|cffA67D45" .. L("TITLE") .. "|r")
+				tip:AddLine(EnsureDB().enabled and ("|cff7CE07C" .. L("MODE_ON") .. "|r") or L("MODE_OFF"))
 			end,
 		})
 		iconLib:Register(ADDON_NAME, data, db.minimap)
@@ -710,7 +710,7 @@ loader:SetScript("OnEvent", function(_, event, arg1)
 			RestoreAudio(db.snapshot)
 			db.snapshot = nil
 			db.enabled = false
-			Announce("Your sound settings from the last fishing session are back.")
+			Announce(L("RESTORED_LOGIN"))
 		end
 		LearnPole()
 		CreateMinimapButton()

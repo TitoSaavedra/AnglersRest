@@ -9,5 +9,6 @@
 ## IconTexture: Interface\Icons\Trade_Fishing
 ## SavedVariables: AnglersRestDB
 
+Locales.lua
 Core.lua
 UI.lua

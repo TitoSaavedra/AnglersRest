@@ -2,7 +2,8 @@
 -- Colours, fonts and art are FlareUI's own: bronze edge, warm dark ground, yellow titles, gold labels.
 -- Every frame has a name: this client rejects a nameless CreateFrame, which left the panel empty.
 
-local ADDON_NAME = ...
+local ADDON_NAME, ns = ...
+local L = ns.L
 
 local frame
 local refreshing = false
@@ -276,13 +277,31 @@ local function Section(parent, text, y)
 	return title
 end
 
+-- the name of a channel, in the client's language
+local function ChannelName(key)
+	local names = {
+		master = L("CHANNEL_MASTER"),
+		sfx = L("CHANNEL_SFX"),
+		music = L("CHANNEL_MUSIC"),
+		ambience = L("CHANNEL_AMBIENCE"),
+		dialog = L("CHANNEL_DIALOG"),
+		sfxOn = L("CHANNEL_SFX_ON"),
+		musicOn = L("CHANNEL_MUSIC_ON"),
+		ambientOn = L("CHANNEL_AMBIENCE_ON"),
+		dialogOn = L("CHANNEL_DIALOG_ON"),
+		allOn = L("CHANNEL_ALL_ON"),
+	}
+	return names[key] or key
+end
+AnglersRest_ChannelName = ChannelName
+
 -- one sound channel: name, value text, slider and the off box at the right
 local function ChannelRow(parent, entry, y)
 	local db = DB()
 
 	local label = MakeText(parent, Name("Channel"), 12, GOLD)
 	label:SetPoint("TOPLEFT", PAD, y)
-	label:SetText(entry.label)
+	label:SetText(AnglersRest_ChannelName(entry.key))
 
 	local row = { entry = entry, label = label }
 
@@ -301,7 +320,7 @@ local function ChannelRow(parent, entry, y)
 		slider:SetValue(db[entry.key] or 100, true)
 		row.slider = slider
 	else
-		value:SetText("|cff808080switch|r")
+		value:SetText("")
 	end
 
 	local off = Checkbox(parent, nil, db.off[entry.key], function(v)
@@ -370,7 +389,7 @@ function AnglersRest_BuildUI()
 	-- header
 	local title = MakeText(f, Name("Title"), 17, TITLE_YELLOW)
 	title:SetPoint("TOPLEFT", PAD, -11)
-	title:SetText("Angler's Rest")
+	title:SetText(L("TITLE"))
 
 	local close = CreateFrame("Button", Name("Close"), f)
 	close:SetSize(18, 18)
@@ -389,13 +408,9 @@ function AnglersRest_BuildUI()
 
 	-- sound: one line per channel this client has
 	local y = -56
-	Section(f, "Sound while fishing", y)
-	local hint = MakeText(f, Name("Hint"), 10, GREY)
-	hint:SetPoint("TOPRIGHT", -PAD, y + 1)
-	hint:SetJustifyH("RIGHT")
-	hint:SetText("the box on the right turns the channel off")
+	Section(f, L("SOUND_SECTION"), y)
 
-	y = y - 30
+	y = y - 26
 	f.rows = {}
 	for _, entry in ipairs(AnglersRest_Channels()) do
 		f.rows[#f.rows + 1] = ChannelRow(f, entry, y)
@@ -406,19 +421,19 @@ function AnglersRest_BuildUI()
 	y = y - 16
 
 	-- the pole
-	Section(f, "The pole", y)
+	Section(f, L("POLE_SECTION"), y)
 	y = y - 26
 
-	local auto = Checkbox(f, "Put my fishing pole on, and hand back what was in my hand", db.autoEquip, function(v)
+	local auto = Checkbox(f, L("AUTO_EQUIP"), db.autoEquip, function(v)
 		AnglersRest_SetDB("autoEquip", v)
 	end)
 	auto:SetPoint("TOPLEFT", PAD - 6, y)
 	f.autoEquipCheck = auto
 	y = y - 26
 
-	local poleButton = PillButton(f, "Equip pole now", 118, function() AnglersRest_EquipPoleNow() end)
+	local poleButton = PillButton(f, L("EQUIP_NOW"), 110, function() AnglersRest_EquipPoleNow() end)
 	poleButton:SetPoint("TOPLEFT", PAD, y)
-	local backButton = PillButton(f, "Give my weapon back", 140, function() AnglersRest_GiveWeaponBackNow() end)
+	local backButton = PillButton(f, L("GIVE_BACK"), 130, function() AnglersRest_GiveWeaponBackNow() end)
 	backButton:SetPoint("LEFT", poleButton, "RIGHT", 8, 0)
 	y = y - 28
 
@@ -426,21 +441,21 @@ function AnglersRest_BuildUI()
 	y = y - 20
 
 	-- behaviour
-	local catchCheck = Checkbox(f, "Sound and weapon back when the line comes in", db.restoreOnCatch, function(v)
+	local catchCheck = Checkbox(f, L("RESTORE_ON_CATCH"), db.restoreOnCatch, function(v)
 		AnglersRest_SetDB("restoreOnCatch", v)
 	end)
 	catchCheck:SetPoint("TOPLEFT", PAD - 6, y)
 	f.catchCheck = catchCheck
 	y = y - 24
 
-	local clickCheck = Checkbox(f, "Double right-click the world to cast", db.doubleClick, function(v)
+	local clickCheck = Checkbox(f, L("DOUBLE_CLICK"), db.doubleClick, function(v)
 		AnglersRest_SetDB("doubleClick", v)
 	end)
 	clickCheck:SetPoint("TOPLEFT", PAD - 6, y)
 	f.doubleClickCheck = clickCheck
 	y = y - 24
 
-	local mapCheck = Checkbox(f, "Icon on the minimap", not db.minimap.hide, function(v)
+	local mapCheck = Checkbox(f, L("MINIMAP_ICON"), not db.minimap.hide, function(v)
 		AnglersRest_SetMinimapShown(v)
 	end)
 	mapCheck:SetPoint("TOPLEFT", PAD - 6, y)
@@ -448,16 +463,17 @@ function AnglersRest_BuildUI()
 	y = y - 30
 
 	-- footer
-	local reset = PillButton(f, "Centre window", 108, function() AnglersRest_ResetWindow() end)
+	local reset = PillButton(f, L("CENTRE"), 90, function() AnglersRest_ResetWindow() end)
 	reset:SetPoint("BOTTOMLEFT", PAD, 12)
 
-	local mode = PillButton(f, "Fishing mode: off", 150, function() AnglersRest_Toggle() end)
+	local mode = PillButton(f, L("MODE_OFF"), 130, function() AnglersRest_Toggle() end)
 	mode:SetPoint("BOTTOMRIGHT", -PAD, 12)
 	f.modeLabel = mode.textLabel
+	f.modeButton = mode
 
 	local footer = MakeText(f, Name("Footer"), 10, GREY)
 	footer:SetPoint("BOTTOMLEFT", reset, "TOPLEFT", 0, 5)
-	footer:SetText("Bronze skin after FlareUI")
+	footer:SetText(L("CREDIT"))
 
 	f:SetHeight(math.abs(y) + 12 + 24 + 18)
 	f:SetScript("OnShow", function() AnglersRest_Refresh() end)
@@ -479,13 +495,13 @@ function AnglersRest_Refresh()
 
 	if frame.status then
 		if db.enabled then
-			frame.status:SetText("|cff7CE07CFishing mode is on|r - your own settings wait to come back.")
+			frame.status:SetText("|cff7CE07C" .. L("STATUS_ON") .. "|r")
 		else
-			frame.status:SetText("Fishing mode is off. Left click the minimap icon to start it.")
+			frame.status:SetText(L("STATUS_OFF"))
 		end
 	end
 	if frame.modeLabel then
-		frame.modeLabel:SetText(db.enabled and "Fishing mode: on" or "Fishing mode: off")
+		frame.modeLabel:SetText(db.enabled and L("MODE_ON") or L("MODE_OFF"))
 	end
 	if frame.catchCheck then frame.catchCheck:SetChecked(db.restoreOnCatch) end
 	if frame.doubleClickCheck then frame.doubleClickCheck:SetChecked(db.doubleClick) end
@@ -510,10 +526,10 @@ end
 
 function AnglersRest_ShowWeaponPrompt(itemID)
 	if WeaponPromptFrame then WeaponPromptFrame:Hide() end
-	local name = (GetItemInfo and select(1, GetItemInfo(itemID))) or "your weapon"
+	local name = (GetItemInfo and select(1, GetItemInfo(itemID))) or ""
 
 	local box = CreateFrame("Frame", "WeaponPromptFrame", UIParent, "BackdropTemplate")
-	box:SetSize(340, 140)
+	box:SetSize(300, 120)
 	box:SetPoint("CENTER")
 	box:SetFrameStrata("DIALOG")
 	box:SetToplevel(true)
@@ -528,25 +544,28 @@ function AnglersRest_ShowWeaponPrompt(itemID)
 	box:SetBackdropBorderColor(EDGE_REST[1], EDGE_REST[2], EDGE_REST[3], 1)
 
 	local title = MakeText(box, Name("PromptTitle"), 15, TITLE_YELLOW)
-	title:SetPoint("TOPLEFT", 16, -14)
-	title:SetText("Angler's Rest")
+	title:SetPoint("TOPLEFT", 16, -12)
+	title:SetText(L("TITLE"))
 
 	local text = MakeText(box, Name("PromptText"), 12, { 1, 1, 1 })
-	text:SetPoint("TOPLEFT", 16, -42)
-	text:SetWidth(308)
+	text:SetPoint("TOPLEFT", 16, -38)
+	text:SetWidth(268)
 	text:SetJustifyH("LEFT")
-	text:SetText("Put your " .. name .. " back on? The fishing line is in.")
+	text:SetText(L("PROMPT_WEAPON"):format(name))
 
-	local yes = PillButton(box, "Yes", 90, function()
+	local yes = PillButton(box, L("YES"), 80, function()
 		AnglersRest_GiveWeaponBackNow()
 		box:Hide()
 	end)
-	yes:SetPoint("BOTTOMLEFT", 16, 14)
-	local no = PillButton(box, "No", 90, function() box:Hide() end)
-	no:SetPoint("BOTTOMRIGHT", -16, 14)
+	yes:SetPoint("BOTTOMLEFT", 16, 12)
+	local no = PillButton(box, L("NO"), 80, function() box:Hide() end)
+	no:SetPoint("BOTTOMRIGHT", -16, 12)
 
 	UISpecialFrames = type(UISpecialFrames) == "table" and UISpecialFrames or {}
 	tinsert(UISpecialFrames, "WeaponPromptFrame")
+
+	-- the mode's button shows the same state as the panel
+	if frame and frame.modeLabel then frame.modeLabel:SetText(DB().enabled and L("MODE_ON") or L("MODE_OFF")) end
 	box:Show()
 end
 

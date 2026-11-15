@@ -1,6 +1,7 @@
 -- Angler's Rest: the fishing panel, in the FlareUI style.
 -- Colours, fonts and art are FlareUI's own: bronze edge, warm dark ground, yellow titles, gold labels.
--- Every frame has a name: this client rejects a nameless CreateFrame, which left the panel empty.
+-- Every frame has a name: this client rejects a nameless CreateFrame.
+-- The window always opens in the middle of the screen; dragging moves it for this session only.
 
 local ADDON_NAME, ns = ...
 local L = ns.L
@@ -18,20 +19,18 @@ local WHITE        = "Interface\\Buttons\\WHITE8X8"
 local SPHERE       = "Interface\\Buttons\\UI-SphereButton-Static"
 local BORDER_FILE  = "Interface\\AddOns\\" .. ADDON_NAME .. "\\Media\\Borders\\FlareUI-Thin.tga"
 local FONT_FACE    = "Fonts\\FRIZQT__.TTF"
-if GetLocale and GetLocale() == "ruRU" then FONT_FACE = "Fonts\\FRIZQT___CYR.TTF" end
+if GetLocale() == "ruRU" then FONT_FACE = "Fonts\\FRIZQT___CYR.TTF" end
 
 local WIDTH, PAD = 400, 18
-local CONTENT = WIDTH - PAD * 2
 local counter = 0
 
--- which text shows the value of which slider (kept outside the frames)
+-- which text shows the value of which slider
 local SliderText = setmetatable({}, { __mode = "k" })
 
 local function DB()
 	return AnglersRestDB
 end
 
--- a unique name for every frame
 local function Name(what)
 	counter = counter + 1
 	return "AnglersRest" .. what .. counter
@@ -45,8 +44,7 @@ local function MakeText(parent, name, size, color)
 	fs:SetShadowColor(0, 0, 0, 1)
 	fs:SetShadowOffset(1, -1)
 	fs:SetJustifyH("LEFT")
-	local c = color or { 1, 1, 1 }
-	fs:SetTextColor(c[1], c[2], c[3])
+	fs:SetTextColor(color[1], color[2], color[3])
 	return fs
 end
 
@@ -54,7 +52,7 @@ end
 local function EdgeFrame(parent, level)
 	local edge = CreateFrame("Frame", Name("Edge"), parent, "BackdropTemplate")
 	edge:SetAllPoints()
-	edge:SetFrameLevel(level or (parent:GetFrameLevel() + 1))
+	edge:SetFrameLevel(level)
 	edge:SetBackdrop({ edgeFile = BORDER_FILE, edgeSize = 8 })
 	edge:SetBackdropBorderColor(EDGE_REST[1], EDGE_REST[2], EDGE_REST[3], 1)
 	return edge
@@ -135,18 +133,15 @@ local function Slider(parent, width, minValue, maxValue, step, value, onChange)
 	core:SetVertexColor(0.14, 0.10, 0.06, 1)
 
 	function s:SetValue(v, quiet)
-		v = math.max(self.minValue, math.min(self.maxValue, v or self.minValue))
-		if self.step > 0 then
-			v = math.floor((v + self.step / 2) / self.step) * self.step
-		end
+		v = math.max(self.minValue, math.min(self.maxValue, v))
+		v = math.floor((v + self.step / 2) / self.step) * self.step
 		self.value = v
 		local ratio = math.max(0, math.min(1, (v - self.minValue) / (self.maxValue - self.minValue)))
 		knob:ClearAllPoints()
 		knob:SetPoint("CENTER", self, "LEFT", ratio * width, 0)
 		fill:SetWidth(math.max(2, ratio * width))
-		local text = SliderText[self]
-		if text then text:SetText("|cffffd100" .. math.floor(v) .. "%|r") end
-		if not quiet and self.onChange then self.onChange(v) end
+		SliderText[self]:SetText("|cffffd100" .. math.floor(v) .. "%|r")
+		if not quiet then self.onChange(v) end
 	end
 	function s:GetValue()
 		return self.value
@@ -154,7 +149,6 @@ local function Slider(parent, width, minValue, maxValue, step, value, onChange)
 
 	local function FromCursor()
 		local left, right = s:GetLeft(), s:GetRight()
-		if not left or not right then return end
 		local x = GetCursorPosition() / s:GetEffectiveScale()
 		s:SetValue(s.minValue + math.max(0, math.min(1, (x - left) / (right - left))) * (s.maxValue - s.minValue))
 	end
@@ -174,7 +168,6 @@ local function Slider(parent, width, minValue, maxValue, step, value, onChange)
 	s:SetScript("OnHide", function() s:SetScript("OnUpdate", nil) end)
 	s:EnableMouse(true)
 
-	s:SetValue(value, true)
 	return s
 end
 
@@ -191,7 +184,7 @@ local function Checkbox(parent, text, isChecked, onToggle, size)
 	local tick = f:CreateTexture(Name("Tick"), "OVERLAY")
 	tick:SetPoint("CENTER", box)
 
-	if C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo("checkbox-minimal") then
+	if C_Texture.GetAtlasInfo("checkbox-minimal") then
 		local bg = f:CreateTexture(Name("CheckBg"), "BACKGROUND")
 		bg:SetAllPoints(box)
 		bg:SetAtlas("checkbox-minimal", true)
@@ -199,7 +192,7 @@ local function Checkbox(parent, text, isChecked, onToggle, size)
 	else
 		box:SetTexture(WHITE)
 		box:SetVertexColor(0.18, 0.14, 0.09, 1)
-		local rim = EdgeFrame(f)
+		local rim = EdgeFrame(f, f:GetFrameLevel() + 1)
 		rim:SetPoint("CENTER", box)
 		rim:SetSize(size + 2, size + 2)
 		tick:SetTexture("Interface\\Buttons\\UI-CheckBox-Check")
@@ -225,7 +218,7 @@ local function Checkbox(parent, text, isChecked, onToggle, size)
 
 	f:SetScript("OnClick", function(self)
 		self:SetChecked(not self:GetChecked())
-		if onToggle then onToggle(self:GetChecked()) end
+		onToggle(self:GetChecked())
 	end)
 	return f
 end
@@ -241,7 +234,7 @@ local function PillButton(parent, text, width, onClick)
 	plate:SetPoint("BOTTOMRIGHT", -2, 2)
 	plate:SetVertexColor(0.13, 0.11, 0.09, 1)
 
-	local edge = EdgeFrame(b)
+	local edge = EdgeFrame(b, b:GetFrameLevel() + 1)
 
 	local label = MakeText(b, Name("ButtonText"), 12, TITLE_YELLOW)
 	label:SetPoint("LEFT", 8, 0)
@@ -258,9 +251,7 @@ local function PillButton(parent, text, width, onClick)
 		edge:SetBackdropBorderColor(EDGE_REST[1], EDGE_REST[2], EDGE_REST[3], 1)
 		plate:SetVertexColor(0.13, 0.11, 0.09, 1)
 	end)
-	b:SetScript("OnClick", function()
-		if onClick then onClick() end
-	end)
+	b:SetScript("OnClick", onClick)
 	return b
 end
 
@@ -277,35 +268,45 @@ local function Section(parent, text, y)
 	return title
 end
 
--- the name of a channel: the game's own word when it has one, the addon's table otherwise
+-- the name of a channel: the game's own word when it has one, otherwise the addon's
+local GameWords = {
+	master   = "GAME_SOUND_MASTER",
+	sfx      = "GAME_SOUND_EFFECTS",
+	music    = "GAME_SOUND_MUSIC",
+	ambience = "GAME_SOUND_AMBIENCE",
+	dialog   = "GAME_SOUND_DIALOGUE",
+	dialogOn = "GAME_SOUND_ENABLE_DIALOGUE",
+}
+
 local function ChannelName(key)
-	local fromGame = ns.GameName and ns.GameName(key)
-	if fromGame then return fromGame end
-	local names = {
+	local globalName = GameWords[key]
+	if globalName then
+		local word = _G[globalName]
+		if type(word) == "string" and word ~= "" then return word end
+	end
+	local own = {
 		master = L("CHANNEL_MASTER"),
 		sfx = L("CHANNEL_SFX"),
 		music = L("CHANNEL_MUSIC"),
 		ambience = L("CHANNEL_AMBIENCE"),
 		dialog = L("CHANNEL_DIALOG"),
-		sfxOn = L("CHANNEL_SFX_ON"),
-		musicOn = L("CHANNEL_MUSIC_ON"),
-		ambientOn = L("CHANNEL_AMBIENCE_ON"),
 		dialogOn = L("CHANNEL_DIALOG_ON"),
-		allOn = L("CHANNEL_ALL_ON"),
 	}
-	return names[key] or key
+	return own[key]
 end
-AnglersRest_ChannelName = ChannelName
 
--- one sound channel: name, value text, slider and the off box at the right
 local function ChannelRow(parent, entry, y)
 	local db = DB()
 
+	-- the master channel keeps its value under "volume"; the rest under their own key
+	local key = entry.key == "master" and "volume" or entry.key
+	local saved = db[key] or 100
+
 	local label = MakeText(parent, Name("Channel"), 12, GOLD)
 	label:SetPoint("TOPLEFT", PAD, y)
-	label:SetText(AnglersRest_ChannelName(entry.key))
+	label:SetText(ChannelName(entry.key))
 
-	local row = { entry = entry, label = label }
+	local row = { entry = entry, key = key, label = label }
 
 	local value = MakeText(parent, Name("ChannelValue"), 12, TITLE_YELLOW)
 	value:SetPoint("TOPRIGHT", -PAD - 30, y)
@@ -313,13 +314,11 @@ local function ChannelRow(parent, entry, y)
 	row.value = value
 
 	if entry.kind == "percent" then
-		local width = WIDTH - PAD * 2 - 30 - 60 - 150
-		local slider = Slider(parent, width, 0, 100, 5, db[entry.key] or 100, function(v)
-			AnglersRest_SetChannel(entry.key, v)
+		local slider = Slider(parent, WIDTH - PAD * 2 - 30 - 60 - 150, 0, 100, 5, saved, function(v)
+			AnglersRest_SetChannel(key, v)
 		end)
 		SliderText[slider] = value
 		slider:SetPoint("TOPLEFT", PAD + 150, y - 6)
-		slider:SetValue(db[entry.key] or 100, true)
 		row.slider = slider
 	else
 		value:SetText("")
@@ -336,21 +335,6 @@ end
 
 -- the window -------------------------------------------------------------------
 
-local function SavePosition()
-	if not frame then return end
-	local point, _, _, x, y = frame:GetPoint(1)
-	local win = DB().window
-	win.point, win.x, win.y = point, x or 0, y or 0
-end
-
-local function FitScale(wanted)
-	local screenH = UIParent:GetHeight() or 768
-	local needed = (frame:GetHeight() or 500) + 40
-	-- 1 unless the window would not fit; it shrinks only as much as it has to
-	local fit = math.min(1, (screenH * 0.96) / needed)
-	return math.max(0.75, math.min(1.25, math.min(wanted or 1, fit)))
-end
-
 function AnglersRest_BuildUI()
 	if frame then return frame end
 	local db = DB()
@@ -364,29 +348,12 @@ function AnglersRest_BuildUI()
 	f:SetMovable(true)
 	f:RegisterForDrag("LeftButton")
 	f:SetScript("OnDragStart", function(self) self:StartMoving() end)
-	f:SetScript("OnDragStop", function(self)
-		self:StopMovingOrSizing()
-		SavePosition()
-	end)
-	f:SetScript("OnMouseDown", function(_, button)
-		if button == "LeftButton" then f:StartMoving() end
-	end)
-	f:SetScript("OnMouseUp", function()
-		f:StopMovingOrSizing()
-		SavePosition()
-	end)
-	f:EnableMouseWheel(true)
-	f:SetScript("OnMouseWheel", function(_, delta)
-		if not IsShiftKeyDown() then return end
-		local win = DB().window
-		win.scale = math.max(0.7, math.min(1.25, (win.scale or 1) + (delta > 0 and 0.05 or -0.05)))
-		AnglersRest_ApplyWindowPosition()
-	end)
+	-- dragging only moves it for this session: the saved spot is never written
+	f:SetScript("OnDragStop", function(self) self:StopMovingOrSizing() end)
 
 	EdgeFrame(f, f:GetFrameLevel() + 5)
 	WindowGround(f)
 	f:Hide()
-	UISpecialFrames = type(UISpecialFrames) == "table" and UISpecialFrames or {}
 	tinsert(UISpecialFrames, "AnglersRestFrame")
 
 	-- header
@@ -401,22 +368,23 @@ function AnglersRest_BuildUI()
 	local closeText = MakeText(close, Name("CloseText"), 15, BRONZE)
 	closeText:SetPoint("CENTER")
 	closeText:SetText("|cffA67D45x|r")
-	close:SetScript("OnClick", function() AnglersRest_ToggleWindow() end)
+	close:SetScript("OnClick", function()
+		f:Hide()
+		db.window.closedByUser = true
+	end)
 	close:HookScript("OnEnter", function() closeText:SetText("|cffffd770x|r") end)
 	close:HookScript("OnLeave", function() closeText:SetText("|cffA67D45x|r") end)
 
 	f.status = MakeText(f, Name("Status"), 11, GREY)
 	f.status:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -2)
-	f.status:SetWidth(CONTENT)
-	f.status:SetHeight(28)
-	f.status:SetJustifyH("LEFT")
-	f.status:SetJustifyV("TOP")
+	f.status:SetWidth(WIDTH - PAD * 2)
+	f.status:SetHeight(14)
 
-	-- sound: one line per channel this client has
-	local y = -56
+	-- sound
+	local y = -52
 	Section(f, L("SOUND_SECTION"), y)
-
 	y = y - 26
+
 	f.rows = {}
 	for _, entry in ipairs(AnglersRest_Channels()) do
 		f.rows[#f.rows + 1] = ChannelRow(f, entry, y)
@@ -426,7 +394,7 @@ function AnglersRest_BuildUI()
 	Divider(f, y - 2)
 	y = y - 16
 
-	-- the pole
+	-- pole
 	Section(f, L("POLE_SECTION"), y)
 	y = y - 26
 
@@ -475,39 +443,37 @@ function AnglersRest_BuildUI()
 	local mode = PillButton(f, L("MODE_OFF"), 130, function() AnglersRest_Toggle() end)
 	mode:SetPoint("BOTTOMRIGHT", -PAD, 12)
 	f.modeLabel = mode.textLabel
-	f.modeButton = mode
 
 	local footer = MakeText(f, Name("Footer"), 10, GREY)
 	footer:SetPoint("BOTTOMLEFT", reset, "TOPLEFT", 0, 5)
 	footer:SetText(L("CREDIT"))
 
-	f:SetHeight(math.abs(y) + 12 + 24 + 18)
+	f:SetWidth(WIDTH)
+	f:SetHeight(-y + 12 + 24 + 18)
+
+	-- the sliders take their values once everything of theirs exists
+	for _, row in ipairs(f.rows) do
+		if row.slider then row.slider:SetValue(db[row.key] or 100, true) end
+	end
+
 	f:SetScript("OnShow", function() AnglersRest_Refresh() end)
 	return f
 end
 
+-- the middle of the screen, always: screen size and window size, nothing saved
 function AnglersRest_ApplyWindowPosition()
 	if not frame then return end
-	local win = DB().window
-	local width = frame:GetWidth() or 400
-	local height = frame:GetHeight() or 500
-	local point, x, y = win.point or "CENTER", win.x or 0, win.y or 0
-	local offset = 0
-	if point == "CENTER" and UIParent and UIParent:GetWidth() then
-		offset = (UIParent:GetWidth() - width) / 2
+	local scale = 1
+	local needH = frame:GetHeight() + 40
+	local needW = frame:GetWidth() + 40
+	local screenH = UIParent:GetHeight()
+	local screenW = UIParent:GetWidth()
+	if needH > screenH or needW > screenW then
+		scale = math.min(screenH / needH, screenW / needW)
 	end
-	-- a window saved on a wider screen would start off-screen: bring it back inside
-	local limitX = math.max(0, offset + width / 2 - 20)
-	local limitY = math.max(0, (UIParent:GetHeight() or 768) / 2 - 20)
-	if x < -limitX or x > limitX or y < -limitY or y > limitY then
-		win.x, win.y = 0, 0
-		x, y = 0, 0
-		win.point = "CENTER"
-		point = "CENTER"
-	end
+	frame:SetScale(scale)
 	frame:ClearAllPoints()
-	frame:SetPoint(point, UIParent, point, x, y)
-	frame:SetScale(FitScale(win.scale))
+	frame:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
 end
 
 function AnglersRest_Refresh()
@@ -515,27 +481,23 @@ function AnglersRest_Refresh()
 	refreshing = true
 	local db = DB()
 
-	if frame.status then
-		if db.enabled then
-			frame.status:SetText("|cff7CE07C" .. L("STATUS_ON") .. "|r")
-		else
-			frame.status:SetText(L("STATUS_OFF"))
-		end
+	if db.enabled then
+		frame.status:SetText("|cff7CE07C" .. L("STATUS_ON") .. "|r")
+	else
+		frame.status:SetText(L("STATUS_OFF"))
 	end
-	if frame.modeLabel then
-		frame.modeLabel:SetText(db.enabled and L("MODE_ON") or L("MODE_OFF"))
-	end
-	if frame.catchCheck then frame.catchCheck:SetChecked(db.restoreOnCatch) end
-	if frame.doubleClickCheck then frame.doubleClickCheck:SetChecked(db.doubleClick) end
-	if frame.minimapCheck then frame.minimapCheck:SetChecked(not db.minimap.hide) end
-	if frame.autoEquipCheck then frame.autoEquipCheck:SetChecked(db.autoEquip) end
+	frame.modeLabel:SetText(db.enabled and L("MODE_ON") or L("MODE_OFF"))
+	frame.catchCheck:SetChecked(db.restoreOnCatch)
+	frame.doubleClickCheck:SetChecked(db.doubleClick)
+	frame.minimapCheck:SetChecked(not db.minimap.hide)
+	frame.autoEquipCheck:SetChecked(db.autoEquip)
 
-	for _, row in ipairs(frame.rows or {}) do
+	for _, row in ipairs(frame.rows) do
 		local off = db.off[row.entry.key]
 		row.off:SetChecked(off)
 		if row.slider then
-			row.slider:SetValue(db[row.entry.key] or 100, true)
-			row.value:SetText("|cffffd100" .. math.floor(db[row.entry.key] or 100) .. "%|r")
+			row.slider:SetValue(db[row.key] or 100, true)
+			row.value:SetText("|cffffd100" .. math.floor(db[row.key] or 100) .. "%|r")
 			row.slider:SetAlpha(off and 0.45 or 1)
 			row.label:SetAlpha(off and 0.55 or 1)
 		end
@@ -548,7 +510,7 @@ end
 
 function AnglersRest_ShowWeaponPrompt(itemID)
 	if WeaponPromptFrame then WeaponPromptFrame:Hide() end
-	local name = C_Item.GetItemNameByID and C_Item.GetItemNameByID(itemID) or GetItemInfo(itemID) or ""
+	local name = C_Item.GetItemNameByID(itemID)
 
 	local box = CreateFrame("Frame", "WeaponPromptFrame", UIParent, "BackdropTemplate")
 	box:SetSize(300, 120)
@@ -557,10 +519,6 @@ function AnglersRest_ShowWeaponPrompt(itemID)
 	box:SetToplevel(true)
 	box:SetClampedToScreen(true)
 	box:EnableMouse(true)
-	box:SetMovable(true)
-	box:RegisterForDrag("LeftButton")
-	box:SetScript("OnDragStart", function(self) self:StartMoving() end)
-	box:SetScript("OnDragStop", function(self) self:StopMovingOrSizing() end)
 	box:SetBackdrop({ bgFile = WHITE, edgeFile = BORDER_FILE, edgeSize = 12 })
 	box:SetBackdropColor(0.06, 0.055, 0.05, 0.97)
 	box:SetBackdropBorderColor(EDGE_REST[1], EDGE_REST[2], EDGE_REST[3], 1)
@@ -583,11 +541,6 @@ function AnglersRest_ShowWeaponPrompt(itemID)
 	local no = PillButton(box, L("NO"), 80, function() box:Hide() end)
 	no:SetPoint("BOTTOMRIGHT", -16, 12)
 
-	UISpecialFrames = type(UISpecialFrames) == "table" and UISpecialFrames or {}
-	tinsert(UISpecialFrames, "WeaponPromptFrame")
-
-	-- the mode's button shows the same state as the panel
-	if frame and frame.modeLabel then frame.modeLabel:SetText(DB().enabled and L("MODE_ON") or L("MODE_OFF")) end
 	box:Show()
 end
 
@@ -602,25 +555,20 @@ function AnglersRest_ShowWindow()
 	AnglersRest_ApplyWindowPosition()
 	AnglersRest_Refresh()
 	frame:Show()
+	DB().window.closedByUser = nil
 end
 
 function AnglersRest_ToggleWindow()
-	if not frame then
-		DB().window.closedByUser = nil
-		AnglersRest_ShowWindow()
-		return
-	end
-	if frame:IsShown() then
+	if frame and frame:IsShown() then
 		frame:Hide()
 		DB().window.closedByUser = true
 	else
-		DB().window.closedByUser = nil
 		AnglersRest_ShowWindow()
 	end
 end
 
 -- the panel opens with the game, unless it was closed on purpose
 function AnglersRest_OpenOnLoad()
+	if DB().window.closedByUser then return end
 	AnglersRest_ShowWindow()
-	if DB().window.closedByUser then frame:Hide() end
 end

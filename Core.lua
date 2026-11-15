@@ -613,27 +613,12 @@ local function OnMouseUp(btn)
 	lastTap = now
 	AnglersRest_Cast()
 end
--- slash commands ----------------------------------------------------------------
+-- slash command ------------------------------------------------------------------
+-- One command, for what the mouse cannot reach: the window is under the right click on the icon.
 
-SLASH_ANGLERSREST1 = "/anglersrest"
-SLASH_ANGLERSREST2 = "/ar"
-SlashCmdList["ANGLERSREST"] = function(msg)
-	msg = (msg or ""):lower():gsub("%s+", "")
-	if msg == "on" then
-		AnglersRest_Activate()
-	elseif msg == "off" then
-		AnglersRest_Deactivate()
-	elseif msg == "cast" then
-		AnglersRest_Cast()
-	elseif msg == "ui" or msg == "window" then
-		AnglersRest_ToggleWindow()
-	elseif msg == "reset" then
-		AnglersRest_ResetWindow()
-	elseif msg == "pole" then
-		AnglersRest_EquipPoleNow()
-	else
-		AnglersRest_Toggle()
-	end
+SLASH_ANGLERSREST1 = "/ar"
+SlashCmdList["ANGLERSREST"] = function()
+	AnglersRest_ToggleWindow()
 end
 
 -- events --------------------------------------------------------------------------

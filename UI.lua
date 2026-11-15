@@ -509,39 +509,44 @@ end
 -- the weapon question after a catch ----------------------------------------------
 
 function AnglersRest_ShowWeaponPrompt(itemID)
-	if WeaponPromptFrame then WeaponPromptFrame:Hide() end
 	local name = C_Item.GetItemNameByID(itemID)
 
-	local box = CreateFrame("Frame", "WeaponPromptFrame", UIParent, "BackdropTemplate")
-	box:SetSize(300, 120)
-	box:SetPoint("CENTER")
-	box:SetFrameStrata("DIALOG")
-	box:SetToplevel(true)
-	box:SetClampedToScreen(true)
-	box:EnableMouse(true)
-	box:SetBackdrop({ bgFile = WHITE, edgeFile = BORDER_FILE, edgeSize = 12 })
-	box:SetBackdropColor(0.06, 0.055, 0.05, 0.97)
-	box:SetBackdropBorderColor(EDGE_REST[1], EDGE_REST[2], EDGE_REST[3], 1)
+	-- the weapon question is made once and then reused: its frame name already exists
+	if not WeaponPromptFrame then
+		local box = CreateFrame("Frame", "WeaponPromptFrame", UIParent, "BackdropTemplate")
+		WeaponPromptFrame = box
+		box:SetSize(300, 120)
+		box:SetPoint("CENTER")
+		box:SetFrameStrata("DIALOG")
+		box:SetToplevel(true)
+		box:SetClampedToScreen(true)
+		box:EnableMouse(true)
+		box:SetBackdrop({ bgFile = WHITE, edgeFile = BORDER_FILE, edgeSize = 12 })
+		box:SetBackdropColor(0.06, 0.055, 0.05, 0.97)
+		box:SetBackdropBorderColor(EDGE_REST[1], EDGE_REST[2], EDGE_REST[3], 1)
 
-	local title = MakeText(box, Name("PromptTitle"), 15, TITLE_YELLOW)
-	title:SetPoint("TOPLEFT", 16, -12)
-	title:SetText(L("TITLE"))
+		local title = MakeText(box, Name("PromptTitle"), 15, TITLE_YELLOW)
+		title:SetPoint("TOPLEFT", 16, -12)
+		title:SetText(L("TITLE"))
 
-	local text = MakeText(box, Name("PromptText"), 12, { 1, 1, 1 })
-	text:SetPoint("TOPLEFT", 16, -38)
-	text:SetWidth(268)
-	text:SetJustifyH("LEFT")
-	text:SetText(L("PROMPT_WEAPON"):format(name))
+		box.promptText = MakeText(box, Name("PromptText"), 12, { 1, 1, 1 })
+		box.promptText:SetPoint("TOPLEFT", 16, -38)
+		box.promptText:SetWidth(268)
+		box.promptText:SetJustifyH("LEFT")
 
-	local yes = PillButton(box, L("YES"), 80, function()
-		AnglersRest_GiveWeaponBackNow()
-		box:Hide()
-	end)
-	yes:SetPoint("BOTTOMLEFT", 16, 12)
-	local no = PillButton(box, L("NO"), 80, function() box:Hide() end)
-	no:SetPoint("BOTTOMRIGHT", -16, 12)
+		local yes = PillButton(box, L("YES"), 80, function()
+			AnglersRest_GiveWeaponBackNow()
+			box:Hide()
+		end)
+		yes:SetPoint("BOTTOMLEFT", 16, 12)
+		local no = PillButton(box, L("NO"), 80, function() box:Hide() end)
+		no:SetPoint("BOTTOMRIGHT", -16, 12)
 
-	box:Show()
+		tinsert(UISpecialFrames, "WeaponPromptFrame")
+	end
+
+	WeaponPromptFrame.promptText:SetText(L("PROMPT_WEAPON"):format(name))
+	WeaponPromptFrame:Show()
 end
 
 function AnglersRest_HideWeaponPrompt()

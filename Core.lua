@@ -9,33 +9,24 @@ local FISHING_SPELL_NAME = (C_Spell and C_Spell.GetSpellName and C_Spell.GetSpel
 local ICON_TEXTURE = 135123 -- Interface\Icons\Trade_Fishing
 local MAINHAND = (INVSLOT_MAINHAND and rawget(_G, "INVSLOT_MAINHAND")) or 16
 
--- Every sound channel the game exposes, with the CVar that really holds the value in this client.
--- Whichever of the two names the client has is read; the value found is written back on restore.
--- Every sound channel this client really has. A channel that is not in its CVar list is left out
--- instead of showing a switch that would do nothing.
+-- The sound channels WoW: Forever actually has (checked against Config.wtf and its logs).
+-- Anything not listed here does not exist in this client and would do nothing.
 local AUDIO = {
-	{ key = "master",   label = "General",       cvar = { "Sound_MasterVolume" },       kind = "percent" },
-	{ key = "sfx",      label = "Effects",       cvar = { "Sound_SFXVolume" },          kind = "percent" },
-	{ key = "music",    label = "Music",         cvar = { "Sound_MusicVolume" },        kind = "percent" },
-	{ key = "ambience", label = "Ambience",      cvar = { "Sound_AmbienceVolume" },     kind = "percent" },
-	{ key = "dialog",   label = "Dialogue",      cvar = { "Sound_DialogVolume" },       kind = "percent" },
-	{ key = "sfxOn",    label = "Effects on",    cvar = { "Sound_EnableSFX" },          kind = "switch" },
-	{ key = "musicOn",  label = "Music on",      cvar = { "Sound_EnableMusic" },        kind = "switch", optional = true },
-	{ key = "ambientOn",label = "Ambience on",   cvar = { "Sound_EnableAmbience" },     kind = "switch", optional = true },
-	{ key = "dialogOn", label = "Dialogue on",   cvar = { "Sound_EnableDialog" },       kind = "switch", optional = true },
-	{ key = "allOn",    label = "All sound",     cvar = { "Sound_EnableAllSound" },     kind = "switch", optional = true },
+	{ key = "master",   cvar = "Sound_MasterVolume",   kind = "percent" },
+	{ key = "sfx",      cvar = "Sound_SFXVolume",      kind = "percent" },
+	{ key = "music",    cvar = "Sound_MusicVolume",    kind = "percent" },
+	{ key = "ambience", cvar = "Sound_AmbienceVolume", kind = "percent" },
+	{ key = "dialog",   cvar = "Sound_DialogVolume",   kind = "percent" },
+	{ key = "dialogOn", cvar = "Sound_EnableDialog",   kind = "switch" },
 }
 
--- The channels this client actually has (an optional one is skipped when its CVar is missing)
+-- The channels this client has: the same short list, nothing to filter out
 local function AvailableAudio()
-	local list = {}
-	for _, entry in ipairs(AUDIO) do
-		local present = C_CVar and C_CVar.GetCVar and C_CVar.GetCVar(entry.cvar[1]) or nil
-		if not entry.optional or present ~= nil then
-			list[#list + 1] = entry
-		end
-	end
-	return list
+	return AUDIO
+end
+
+local function CvarName(entry)
+	return entry.cvar
 end
 
 local defaults = {
@@ -87,10 +78,7 @@ local function Number(v, fallback)
 end
 
 local function CvarFor(entry)
-	for _, name in ipairs(entry.cvar) do
-		if GetCVar1(name) ~= nil then return name end
-	end
-	return entry.cvar[1]
+	return entry.cvar
 end
 
 local function Announce(msg)
@@ -117,9 +105,14 @@ end
 local EnsureDB = AnglersRest_EnsureDB
 
 function AnglersRest_Channels()
-	return AvailableAudio()
+	return AUDIO
 end
 AnglersRest_AvailableChannels = AnglersRest_Channels
+
+-- the name of a channel, in the client's language (UI.lua supplies the words)
+function AnglersRest_ChannelLabel(entry)
+	return entry.cvar
+end
 
 -- fishing ---------------------------------------------------------------------
 
@@ -224,7 +217,7 @@ function AnglersRest_GiveWeaponBack(quiet)
 	if not PoleInHand() then return end -- the player already changed their main hand
 	EquipItemByName(oldID)
 	if not quiet then
-		local name = GetItemInfo and select(1, GetItemInfo(oldID))
+		local name = C_Item.GetItemNameByID and C_Item.GetItemNameByID(oldID) or GetItemInfo(oldID)
 		Announce(L("EQUIPPED"):format(name or ""))
 	end
 end
@@ -237,7 +230,12 @@ local function EquipPole(quiet)
 		return false
 	end
 	if PoleInHand() then LearnPole(); return true end
-	local pole = LearnPole() or FindPoleInBags()
+	-- a pole kept from the last session only counts if it is still in the bags
+	local pole = nil
+	if poleSeen and ItemIsFishingPole(poleSeen) and (FindPoleInBags() == poleSeen or C_Item.IsEquippedItem(poleSeen)) then
+		pole = poleSeen
+	end
+	if not pole then pole = FindPoleInBags() end
 	if not pole then
 		if not quiet then Announce(L("NO_POLE")) end
 		return false
@@ -249,7 +247,7 @@ local function EquipPole(quiet)
 	db.weaponLocked = false
 	EquipItemByName(pole)
 	if not quiet then
-		local name = GetItemInfo and select(1, GetItemInfo(pole))
+		local name = C_Item.GetItemNameByID and C_Item.GetItemNameByID(pole) or GetItemInfo(pole)
 		Announce(L("EQUIPPED"):format(name or ""))
 	end
 	return true
@@ -336,7 +334,9 @@ end
 	local parts = { "general " .. (db.volume or 100) .. "%", "effects " .. (db.sfx or 100) .. "%", "music " .. (db.music or 100) .. "%" }
 	local muted = {}
 	for _, entry in ipairs(AvailableAudio()) do
-		if db.off[entry.key] and entry.key ~= "master" then muted[#muted + 1] = string.lower(entry.label) end
+		if db.off[entry.key] and entry.key ~= "master" then
+			muted[#muted + 1] = entry.cvar
+		end
 	end
 	if #muted > 0 then parts[#parts + 1] = "off: " .. table.concat(muted, ", ") end
 	return table.concat(parts, ", ")

@@ -532,7 +532,7 @@ end
 
 function AnglersRest_ShowWeaponPrompt(itemID)
 	if WeaponPromptFrame then WeaponPromptFrame:Hide() end
-	local name = (GetItemInfo and select(1, GetItemInfo(itemID))) or ""
+	local name = C_Item.GetItemNameByID and C_Item.GetItemNameByID(itemID) or GetItemInfo(itemID) or ""
 
 	local box = CreateFrame("Frame", "WeaponPromptFrame", UIParent, "BackdropTemplate")
 	box:SetSize(300, 120)

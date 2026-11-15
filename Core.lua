@@ -181,17 +181,7 @@ end
 
 local poleSeen = nil      -- itemID of the pole currently known to be worn
 
--- Every frame through a wrapper: some clients refuse a nameless CreateFrame, and one of those
--- errors used to stop the whole addon before its events were even wired.
-local widgetCount = 0
-local function NewFrame(kind, name, parent, template)
-	widgetCount = widgetCount + 1
-	local target = parent or UIParent
-	local ok, frameObject = pcall(CreateFrame, kind, name, target, template)
-	if ok and frameObject then return frameObject end
-	return CreateFrame(kind, "AnglersRestWidget" .. widgetCount, target, template)
-end
-
+-- Frames with a name: this client does not take a nameless CreateFrame.
 local function LearnPole()
 	local id = MainHandID()
 	if id and ItemIsFishingPole(id) then
@@ -462,7 +452,7 @@ end
 
 local function BuildMinimapIcon(parent)
 	local border = "Interface\\AddOns\\" .. ADDON_NAME .. "\\Media\\Borders\\FlareUI-Thin.tga"
-	local btn = NewFrame("Button", "AnglersRestMinimapButton", parent or Minimap, "BackdropTemplate")
+	local btn = CreateFrame("Button", "AnglersRestMinimapButton", parent or Minimap, "BackdropTemplate")
 	btn:SetSize(30, 30)
 	btn:SetFrameStrata("MEDIUM")
 	btn:SetFrameLevel(8)
@@ -471,7 +461,7 @@ local function BuildMinimapIcon(parent)
 	btn:RegisterForDrag("LeftButton")
 	btn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
 
-	local edge = NewFrame("Frame", nil, btn, "BackdropTemplate")
+	local edge = CreateFrame("Frame", "AnglersRestMinimapEdge", btn, "BackdropTemplate")
 	edge:SetAllPoints()
 	edge:SetFrameLevel(btn:GetFrameLevel() + 1)
 	edge:SetBackdrop({ edgeFile = border, edgeSize = 8 })
@@ -648,7 +638,7 @@ end
 
 -- events --------------------------------------------------------------------------
 
-local events = NewFrame("Frame", nil)
+local events = CreateFrame("Frame", "AnglersRestEvents")
 events:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_START", "player")
 events:RegisterUnitEvent("UNIT_SPELLCAST_CHANNEL_STOP", "player")
 events:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
@@ -718,7 +708,7 @@ end)
 
 -- load ----------------------------------------------------------------------------
 
-local loader = NewFrame("Frame", nil)
+local loader = CreateFrame("Frame", "AnglersRestLoader")
 loader:RegisterEvent("ADDON_LOADED")
 loader:RegisterEvent("PLAYER_LOGIN")
 loader:RegisterEvent("PLAYER_LOGOUT")
@@ -742,6 +732,8 @@ loader:SetScript("OnEvent", function(_, event, arg1)
 		AnglersRest_ApplyIconState()
 		if AnglersRest_ApplyWindowPosition then AnglersRest_ApplyWindowPosition() end
 		AnglersRest_RefreshPanel()
+		-- the panel opens with the game, on or off, unless it was closed on purpose
+		if AnglersRest_OpenOnLoad then AnglersRest_OpenOnLoad() end
 	elseif event == "PLAYER_LOGOUT" then
 		local db = AnglersRestDB
 		if db and db.snapshot then

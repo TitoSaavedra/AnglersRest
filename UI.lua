@@ -489,8 +489,24 @@ end
 function AnglersRest_ApplyWindowPosition()
 	if not frame then return end
 	local win = DB().window
+	local width = frame:GetWidth() or 400
+	local height = frame:GetHeight() or 500
+	local point, x, y = win.point or "CENTER", win.x or 0, win.y or 0
+	local offset = 0
+	if point == "CENTER" and UIParent and UIParent:GetWidth() then
+		offset = (UIParent:GetWidth() - width) / 2
+	end
+	-- a window saved on a wider screen would start off-screen: bring it back inside
+	local limitX = math.max(0, offset + width / 2 - 20)
+	local limitY = math.max(0, (UIParent:GetHeight() or 768) / 2 - 20)
+	if x < -limitX or x > limitX or y < -limitY or y > limitY then
+		win.x, win.y = 0, 0
+		x, y = 0, 0
+		win.point = "CENTER"
+		point = "CENTER"
+	end
 	frame:ClearAllPoints()
-	frame:SetPoint(win.point or "CENTER", UIParent, win.point or "CENTER", win.x or 0, win.y or 0)
+	frame:SetPoint(point, UIParent, point, x, y)
 	frame:SetScale(FitScale(win.scale))
 end
 

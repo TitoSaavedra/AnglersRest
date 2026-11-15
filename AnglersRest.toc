@@ -1,0 +1,13 @@
+## Interface: 16001
+## Title: |cffA67D45Angler's Rest|r
+## Notes: Fishing mode for the minimap button, with a panel in the FlareUI style. Left click the minimap icon: your audio is read and put into fishing mode; click again: every value goes back exactly as it was. Double right-click the world casts the line.
+## Notes-esES: Modo pesca con el icono del minimapa y panel con el estilo de FlareUI. Clic izquierdo en el icono: lee tu audio y lo pone en modo pesca; otro clic: lo devuelve exactamente como estaba. Doble clic derecho en el mundo lanza la caña.
+## Notes-esMX: Modo pesca con el icono del minimapa y panel con el estilo de FlareUI. Clic izquierdo en el icono: lee tu audio y lo pone en modo pesca; otro clic: lo devuelve exactamente como estaba. Doble clic derecho en el mundo lanza la caña.
+## Author: TitoS
+## Version: 1.1.0
+## Category: User Interface
+## IconTexture: Interface\Icons\Trade_Fishing
+## SavedVariables: AnglersRestDB
+
+Core.lua
+UI.lua

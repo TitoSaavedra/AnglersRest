@@ -1,0 +1,13 @@
+# WoW saved variables and caches
+*.lua.bak
+WTF/
+Logs/
+Errors/
+Cache/
+
+# OS / editor noise
+Thumbs.db
+.DS_Store
+.vscode/
+.idea/
+*~

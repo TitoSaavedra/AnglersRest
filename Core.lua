@@ -1,5 +1,5 @@
--- Angler's Rest: fishing audio mode + a fishing panel in the FlareUI style.
--- The minimap icon is drawn by LibDBIcon when another addon ships it, otherwise by this addon.
+-- Angler's Rest: fishing audio mode and its panel.
+-- No libraries: the minimap icon is drawn here.
 
 local ADDON_NAME, ns = ...
 local L = ns.L
@@ -10,48 +10,29 @@ local ICON_TEXTURE = 135123 -- Interface\Icons\Trade_Fishing
 local MAINHAND = (INVSLOT_MAINHAND and rawget(_G, "INVSLOT_MAINHAND")) or 16
 
 -- The sound channels WoW: Forever actually has (checked against Config.wtf and its logs).
--- Anything not listed here does not exist in this client and would do nothing.
+-- While fishing: general and effects at 100 %, everything else silenced. On exit every value returns.
 local AUDIO = {
-	{ key = "master",   cvar = "Sound_MasterVolume",   kind = "percent" },
-	{ key = "sfx",      cvar = "Sound_SFXVolume",      kind = "percent" },
-	{ key = "music",    cvar = "Sound_MusicVolume",    kind = "percent" },
-	{ key = "ambience", cvar = "Sound_AmbienceVolume", kind = "percent" },
-	{ key = "dialog",   cvar = "Sound_DialogVolume",   kind = "percent" },
-	{ key = "dialogOn", cvar = "Sound_EnableDialog",   kind = "switch" },
+	{ key = "volume",   cvar = "Sound_MasterVolume",   percent = 100 },
+	{ key = "sfx",      cvar = "Sound_SFXVolume",      percent = 100 },
+	{ key = "music",    cvar = "Sound_MusicVolume",    percent = 0 },
+	{ key = "ambience", cvar = "Sound_AmbienceVolume", percent = 0 },
+	{ key = "dialog",   cvar = "Sound_DialogVolume",   percent = 0 },
+	{ key = "dialogOn", cvar = "Sound_EnableDialog",   percent = 0 },
 }
 
--- The channels this client has: the same short list, nothing to filter out
-local function AvailableAudio()
-	return AUDIO
-end
-
-local function CvarName(entry)
-	return entry.cvar
-end
-
 local defaults = {
-	enabled       = false,
-	-- the value each channel takes while fishing
-	volume        = 100,
-	sfx           = 100,
-	music         = 100,
-	ambience      = 100,
-	dialog        = 100,
-	-- per-channel off switches while fishing: percent channels read 0, the others a channel switch
-	off           = { music = false, ambience = true, dialog = true },
+	enabled        = false,
 	restoreOnCatch = true,
-	doubleClick   = true,
-	-- the pole: put it on when fishing starts, give the old weapon back when it ends
-	autoEquip     = true,
-	weaponToRestore = nil,   -- itemID kept only if we took the pole off again ourselves
-	weaponLocked  = false,   -- the player changed weapons by hand: don't fight them
-	minimap       = { hide = false, angle = 220 },
-	window        = { point = "CENTER", x = 0, y = 0 },
+	doubleClick    = true,
+	autoEquip      = true,
+	weaponToRestore = nil,   -- the weapon we took off, to give back afterwards
+	map            = { hide = false, angle = 220 },
+	window         = { closedByUser = false },
 }
 
 local resumeAfterCombat, resumeQuiet = false, false
 local intervalTimer, idleTimer
-local minimapButton, buttonMode = nil, "custom"
+local minimapButton = nil
 
 AnglersRest_ApplyIconState = function() end
 AnglersRest_RefreshPanel = function() end
@@ -144,22 +125,17 @@ local function PoleInHand()
 end
 
 local lastCast = 0
-local equipAfterSwap = false
+local poleSeen = nil
 
 function AnglersRest_Cast()
 	-- nothing at all while the mode is off: no cast, no message
 	if not EnsureDB().enabled then return end
 	local now = GetTime()
 	if now - lastCast < 0.4 then return end
-	if InCombatLockdown and InCombatLockdown() then return end
+	if InCombatLockdown() then return end
 	if IsCastingFishing() then return end
 	if not PoleInHand() then
-		-- no pole in hand: put yours on first (if the option is on) and cast once it is there
-		if EquipPole(true) and not PoleInHand() then
-			equipAfterSwap = true
-			lastCast = now
-			return
-		end
+		EquipPole(true)
 		if not PoleInHand() then
 			Announce(L("NO_POLE"))
 			return
@@ -169,108 +145,78 @@ function AnglersRest_Cast()
 	CastSpellByID(FISHING_SPELL_ID)
 end
 
--- The pole: swap it in on the main hand, swap the old weapon back after ----------------------
--- On this client the fishing pole can be equipped from addon code (a normal item, not a weapon a
--- warrior or rogue must be holding through combat), so no secure button is needed.
+-- The pole goes on the main hand when the mode starts; the old weapon comes back after --------
 
-local poleSeen = nil      -- itemID of the pole currently known to be worn
-
--- Frames with a name: this client does not take a nameless CreateFrame.
 local function LearnPole()
-	local id = MainHandID()
-	if id and ItemIsFishingPole(id) then
-		poleSeen = id
-	end
-	return poleSeen
+	if PoleInHand() then poleSeen = MainHandID() end
 end
 
--- The first pole found in the bags.
+-- The first pole found in the bags: bag 0 first, then the bag slots the client reports.
 local function FindPoleInBags()
-	local bags = (NUM_BAG_SLOTS or 4) + (NUM_BANKBAGSLOTS or 0)
+	local bags = NUM_BAG_SLOTS or 4
 	for bag = 0, bags do
-		local size = (C_Container and C_Container.GetContainerNumSlots and C_Container.GetContainerNumSlots(bag))
-			or (GetContainerNumSlots and GetContainerNumSlots(bag)) or 0
+		local size = C_Container.GetContainerNumSlots(bag)
 		for slot = 1, size do
-			local id
-			if C_Container and C_Container.GetContainerItemID then
-				id = C_Container.GetContainerItemID(bag, slot)
-			elseif GetContainerItemID then
-				id = GetContainerItemID(bag, slot)
-			end
+			local id = C_Container.GetContainerItemID(bag, slot)
 			if id and ItemIsFishingPole(id) then return id end
 		end
 	end
-	return nil
 end
 
--- The old weapon comes back when the line comes in, the mode goes off, or the game closes.
+-- The old weapon comes back when the line comes in or the mode goes off.
 function AnglersRest_GiveWeaponBack(quiet)
 	local db = EnsureDB()
 	local oldID = db.weaponToRestore
 	db.weaponToRestore = nil
-	db.weaponLocked = false
 	if not oldID then return end
-	if InCombatLockdown and InCombatLockdown() then
-		db.weaponToRestore = oldID -- try again after the fight
+	if InCombatLockdown() then
+		db.weaponToRestore = oldID -- after the fight
 		return
 	end
-	if not PoleInHand() then return end -- the player already changed their main hand
 	EquipItemByName(oldID)
 	if not quiet then
-		local name = C_Item.GetItemNameByID and C_Item.GetItemNameByID(oldID) or GetItemInfo(oldID)
-		Announce(L("EQUIPPED"):format(name or ""))
+		Announce(L("EQUIPPED"):format(C_Item.GetItemNameByID(oldID)))
 	end
 end
 
 local function EquipPole(quiet)
 	local db = EnsureDB()
-	if not db.autoEquip then return false end
-	if InCombatLockdown and InCombatLockdown() then
+	if InCombatLockdown() then
 		if not quiet then Announce(L("IN_COMBAT")) end
-		return false
+		return
 	end
-	if PoleInHand() then LearnPole(); return true end
-	-- a pole kept from the last session only counts if it is still in the bags
-	local pole = nil
-	if poleSeen and ItemIsFishingPole(poleSeen) and (FindPoleInBags() == poleSeen or C_Item.IsEquippedItem(poleSeen)) then
-		pole = poleSeen
-	end
-	if not pole then pole = FindPoleInBags() end
+	if PoleInHand() then return end
+
+	local pole = FindPoleInBags()
 	if not pole then
 		if not quiet then Announce(L("NO_POLE")) end
-		return false
+		return
 	end
+
 	local oldID = MainHandID()
-	if oldID and oldID ~= pole and not ItemIsFishingPole(oldID) then
+	if oldID and not ItemIsFishingPole(oldID) then
 		db.weaponToRestore = oldID
 	end
-	db.weaponLocked = false
 	EquipItemByName(pole)
 	if not quiet then
-		local name = C_Item.GetItemNameByID and C_Item.GetItemNameByID(pole) or GetItemInfo(pole)
-		Announce(L("EQUIPPED"):format(name or ""))
+		Announce(L("EQUIPPED"):format(C_Item.GetItemNameByID(pole)))
 	end
-	return true
 end
-
 -- audio -----------------------------------------------------------------------
 
+-- every channel the client has, saved as "cvar -> value" right before touching anything
 local function ReadAudio()
-	local saved = { values = {}, at = time and time() or 0 }
-	for _, entry in ipairs(AvailableAudio()) do
-		local name = CvarFor(entry)
-		saved.values[entry.key] = { cvar = name, value = Number(GetCVar1(name)) }
+	local saved = {}
+	for _, entry in ipairs(AUDIO) do
+		saved[entry.cvar] = Number(GetCVar1(entry.cvar))
 	end
 	return saved
 end
 
 local function RestoreAudio(saved)
-	if type(saved) ~= "table" or type(saved.values) ~= "table" then return end
-	for _, entry in ipairs(AvailableAudio()) do
-		local rec = saved.values[entry.key]
-		if type(rec) == "table" and rec.cvar and rec.value ~= nil then
-			SetCVar1(rec.cvar, rec.value)
-		end
+	if type(saved) ~= "table" then return end
+	for name, value in pairs(saved) do
+		if value ~= nil then SetCVar1(name, value) end
 	end
 end
 
@@ -279,36 +225,20 @@ local function StopTimers()
 	if idleTimer then idleTimer:Cancel(); idleTimer = nil end
 end
 
-local function ApplyAudio(db)
-	local offline = db.off or {}
-	for _, entry in ipairs(AvailableAudio()) do
-		local name = CvarFor(entry)
-		local off = offline[entry.key]
-		if entry.kind == "switch" then
-			SetCVar1(name, off and 0 or 1)
-		elseif entry.key == "master" then
-			-- the master is never silenced from the panel: restoring it is its whole point
-			SetCVar1(name, (off and 0 or (db.volume or 100)) / 100)
+local function ApplyAudio()
+	for _, entry in ipairs(AUDIO) do
+		local value = entry.percent / 100
+		if entry.key == "music" and value > 0 then
+			-- music raised in one go from 0 often stays silent: drop it and bring it up after
+			SetCVar1(entry.cvar, 0)
+			C_Timer.After(0.1, function()
+				if EnsureDB().enabled then SetCVar1(entry.cvar, value) end
+			end)
 		else
-			local value = db[entry.key] or 100
-			if entry.key == "music" and not off then
-				-- WoW often ignores a music slider raised in one go from a saved low value:
-				-- drop it to 0 and bring it up a moment later
-				SetCVar1(name, 0)
-				if C_Timer and C_Timer.After then
-					C_Timer.After(0.1, function()
-						if EnsureDB().enabled then SetCVar1(name, value / 100) end
-					end)
-				else
-					SetCVar1(name, value / 100)
-				end
-			else
-				SetCVar1(name, off and 0 or value / 100)
-			end
+			SetCVar1(entry.cvar, value)
 		end
 	end
 end
-
 function AnglersRest_Activate(silent)
 	local db = EnsureDB()
 	if InCombatLockdown and InCombatLockdown() then
@@ -320,7 +250,7 @@ function AnglersRest_Activate(silent)
 		db.snapshot = ReadAudio()
 	end
 	db.enabled = true
-	ApplyAudio(db)
+	ApplyAudio()
 	EquipPole(silent)
 
 	AnglersRest_ApplyIconState()
@@ -328,18 +258,6 @@ function AnglersRest_Activate(silent)
 	if not silent then
 		Announce("|cff7CE07C" .. L("MODE_ON") .. "|r")
 	end
-end
-
-	function describeAudio(db)
-	local parts = { "general " .. (db.volume or 100) .. "%", "effects " .. (db.sfx or 100) .. "%", "music " .. (db.music or 100) .. "%" }
-	local muted = {}
-	for _, entry in ipairs(AvailableAudio()) do
-		if db.off[entry.key] and entry.key ~= "master" then
-			muted[#muted + 1] = entry.cvar
-		end
-	end
-	if #muted > 0 then parts[#parts + 1] = "off: " .. table.concat(muted, ", ") end
-	return table.concat(parts, ", ")
 end
 
 function AnglersRest_Deactivate(silent)
@@ -369,7 +287,7 @@ end
 local function KeepHeld()
 	local db = EnsureDB()
 	if not db.enabled or not db.snapshot then return end
-	ApplyAudio(db)
+	ApplyAudio()
 end
 
 function AnglersRest_Catch()
@@ -398,65 +316,28 @@ function AnglersRest_SetDB(key, value)
 	AnglersRest_RefreshPanel()
 end
 
-function AnglersRest_SetChannel(key, value)
-	local db = EnsureDB()
-	db[key] = value
-	if db.enabled and db.snapshot then ApplyAudio(db) end
-	AnglersRest_RefreshPanel()
-end
-
-function AnglersRest_SetChannelOff(key, off)
-	local db = EnsureDB()
-	db.off[key] = off and true or false
-	if db.enabled and db.snapshot then ApplyAudio(db) end
-	AnglersRest_RefreshPanel()
-end
-
 function AnglersRest_GetAudioSnapshot()
 	return EnsureDB().snapshot
 end
 
 function AnglersRest_SetMinimapShown(shown)
-	local db = EnsureDB()
-	db.minimap.hide = not shown
-	if minimapButton then
-		if buttonMode == "lib" then
-			local lib = LibStub and LibStub("LibDBIcon-1.0", true)
-			if lib then
-				if shown then lib:Show(ADDON_NAME) else lib:Hide(ADDON_NAME) end
-			end
-		else
-			minimapButton:SetShown(shown)
-		end
-	end
+	EnsureDB().map.hide = not shown
+	minimapButton:SetShown(shown)
 	AnglersRest_RefreshPanel()
 end
 
-function AnglersRest_ResetWindow()
-	local db = EnsureDB()
-	db.window.point, db.window.x, db.window.y = "CENTER", 0, 0
-	-- the scale is left as it is: forgetting it would make the window jump back to full size
-	if AnglersRest_ApplyWindowPosition then AnglersRest_ApplyWindowPosition() end
-end
+-- double right-click on the world -------------------------------------------------
 
-function AnglersRest_EquipPoleNow()
-	EquipPole(false)
-	AnglersRest_RefreshPanel()
-end
 
-function AnglersRest_GiveWeaponBackNow()
-	AnglersRest_GiveWeaponBack(false)
-	AnglersRest_RefreshPanel()
-end
 
 -- minimap icon ----------------------------------------------------------------
 
-local function BuildMinimapIcon(parent)
-	local border = "Interface\\AddOns\\" .. ADDON_NAME .. "\\Media\\Borders\\FlareUI-Thin.tga"
-	local btn = CreateFrame("Button", "AnglersRestMinimapButton", parent or Minimap, "BackdropTemplate")
+local function CreateMinimapButton()
+	local db = EnsureDB()
+
+	local btn = CreateFrame("Button", "AnglersRestMinimapButton", Minimap, "BackdropTemplate")
 	btn:SetSize(30, 30)
 	btn:SetFrameStrata("MEDIUM")
-	btn:SetFrameLevel(8)
 	btn:SetClampedToScreen(true)
 	btn:EnableMouse(true)
 	btn:RegisterForDrag("LeftButton")
@@ -464,57 +345,15 @@ local function BuildMinimapIcon(parent)
 
 	local edge = CreateFrame("Frame", "AnglersRestMinimapEdge", btn, "BackdropTemplate")
 	edge:SetAllPoints()
-	edge:SetFrameLevel(btn:GetFrameLevel() + 1)
-	edge:SetBackdrop({ edgeFile = border, edgeSize = 8 })
+	edge:SetBackdrop({ edgeFile = "Interface\\AddOns\\" .. ADDON_NAME .. "\\Media\\Borders\\FlareUI-Thin.tga", edgeSize = 8 })
 	edge:SetBackdropBorderColor(0.55, 0.42, 0.24, 1)
 	btn.edge = edge
 
-	local icon = btn:CreateTexture(nil, "ARTWORK")
+	local icon = btn:CreateTexture("AnglersRestMinimapIcon", "ARTWORK")
 	icon:SetTexture(ICON_TEXTURE)
 	icon:SetPoint("TOPLEFT", 5, -5)
 	icon:SetPoint("BOTTOMRIGHT", -5, 5)
 	btn.iconTexture = icon
-	return btn
-end
-
-local function IconTooltip(parent)
-	GameTooltip:SetOwner(parent, "ANCHOR_LEFT")
-	GameTooltip:AddLine("|cffA67D45" .. L("TITLE") .. "|r")
-	GameTooltip:AddLine(EnsureDB().enabled and ("|cff7CE07C" .. L("MODE_ON") .. "|r") or L("MODE_OFF"), 1, 1, 1)
-	GameTooltip:AddLine(" ")
-	GameTooltip:AddLine(L("HOVER_LEFT"), 1, 1, 1)
-	GameTooltip:AddLine(L("HOVER_RIGHT"), 1, 1, 1)
-	GameTooltip:Show()
-end
-
-local function CreateMinimapButton()
-	local db = EnsureDB()
-
-	local ldb = LibStub and LibStub("LibDataBroker-1.1", true)
-	local iconLib = LibStub and LibStub("LibDBIcon-1.0", true)
-	if ldb and iconLib then
-		local data = ldb:NewDataObject(ADDON_NAME, {
-			type = "launcher",
-			icon = ICON_TEXTURE,
-			label = "Angler's Rest",
-			OnClick = function(_, button)
-				if button == "LeftButton" then
-					AnglersRest_Toggle()
-				else
-					AnglersRest_ToggleWindow()
-				end
-			end,
-			OnTooltipShow = function(tip)
-				tip:AddLine("|cffA67D45" .. L("TITLE") .. "|r")
-				tip:AddLine(EnsureDB().enabled and ("|cff7CE07C" .. L("MODE_ON") .. "|r") or L("MODE_OFF"))
-			end,
-		})
-		iconLib:Register(ADDON_NAME, data, db.minimap)
-		buttonMode = "lib"
-		return
-	end
-
-	local btn = BuildMinimapIcon(Minimap)
 	minimapButton = btn
 
 	local function PositionFromCursor()
@@ -537,7 +376,7 @@ local function CreateMinimapButton()
 	btn:SetScript("OnDragStop", function()
 		btn.dragging = nil
 		btn:SetScript("OnUpdate", nil)
-		EnsureDB().minimap.angle = PositionFromCursor()
+		EnsureDB().map.angle = PositionFromCursor()
 	end)
 	btn:SetScript("OnClick", function(_, button)
 		if btn.dragging then return end
@@ -547,16 +386,24 @@ local function CreateMinimapButton()
 			AnglersRest_ToggleWindow()
 		end
 	end)
-	btn:SetScript("OnEnter", function(self) IconTooltip(self) end)
+	btn:SetScript("OnEnter", function(self)
+		GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+		GameTooltip:AddLine("|cffA67D45" .. L("TITLE") .. "|r")
+		GameTooltip:AddLine(EnsureDB().enabled and ("|cff7CE07C" .. L("MODE_ON") .. "|r") or L("MODE_OFF"), 1, 1, 1)
+		GameTooltip:AddLine(" ")
+		GameTooltip:AddLine(L("HOVER_LEFT"), 1, 1, 1)
+		GameTooltip:AddLine(L("HOVER_RIGHT"), 1, 1, 1)
+		GameTooltip:Show()
+	end)
 	btn:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
-	local angle = db.minimap.angle or 220
+	local angle = db.map.angle or 220
 	btn:SetPoint("CENTER", Minimap, "CENTER", math.cos(math.rad(angle)) * 80, math.sin(math.rad(angle)) * 80)
-	btn:SetShown(not db.minimap.hide)
+	btn:SetShown(not db.map.hide)
 end
 
 local function PaintIcon()
-	if buttonMode ~= "custom" or not minimapButton then return end
+	if not minimapButton then return end
 	local on = EnsureDB().enabled
 	local c = on and { 1, 0.84, 0.5 } or { 0.55, 0.42, 0.24 }
 	minimapButton.edge:SetBackdropBorderColor(c[1], c[2], c[3], 1)
@@ -656,15 +503,9 @@ events:SetScript("OnEvent", function(_, event, arg1, arg2, spellID)
 			local id = MainHandID()
 			if id and ItemIsFishingPole(id) then
 				poleSeen = id
-				-- a cast that was waiting for the pole to be on: go
-				if equipAfterSwap then
-					equipAfterSwap = false
-					C_Timer.After(0.1, function() AnglersRest_Cast() end)
-				end
-			elseif db.weaponToRestore and id and id ~= db.weaponToRestore then
+			elseif db.weaponToRestore and id ~= db.weaponToRestore then
 				-- the player chose another weapon by hand: leave their choice alone
 				db.weaponToRestore = nil
-				db.weaponLocked = true
 			end
 		end
 		return
